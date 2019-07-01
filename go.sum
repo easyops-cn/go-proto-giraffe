@@ -1,0 +1,5 @@
+github.com/gogo/protobuf v1.2.2-0.20190611061853-dadb62585089 h1:raOeh+DEb2K79TKYcitwQUJOc4xdEOEJsgm8zQ6q1IU=
+github.com/gogo/protobuf v1.2.2-0.20190611061853-dadb62585089/go.mod h1:hp+jE20tsWTFYpLwKvXlhS1hjn+gTNwPg2I6zVXpSg4=
+github.com/kisielk/errcheck v1.1.0/go.mod h1:EZBBE59ingxPouuu3KfxchcWSUPOHkagtvWXihfKN4Q=
+github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
+golang.org/x/tools v0.0.0-20180221164845-07fd8470d635/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
