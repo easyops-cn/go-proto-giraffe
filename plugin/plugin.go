@@ -2,11 +2,13 @@ package plugin
 
 import (
 	"fmt"
-	"github.com/easyops-cn/go-proto-giraffe"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/vanity"
 	"strconv"
 	"strings"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/vanity"
+
+	"github.com/easyops-cn/go-proto-giraffe"
 
 	pb "github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
 	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
@@ -16,14 +18,15 @@ import (
 // It is incremented whenever an incompatibility between the generated code and
 // the grpc package is introduced; the generated code references
 // a constant, grpc.SupportPackageIsVersionN (where N is generatedCodeVersion).
-const generatedCodeVersion = 3
+const generatedCodeVersion = 4
 
 // Paths for packages used by code generated in this file,
 // relative to the import_prefix of the generator.Generator.
 const (
-	ioPkgPath      = "io"
-	contextPkgPath = "context"
-	giraffePkgPath = "github.com/easyops-cn/giraffe-micro"
+	ioPkgPath           = "io"
+	contextPkgPath      = "context"
+	giraffePkgPath      = "github.com/easyops-cn/giraffe-micro"
+	giraffeProtoPkgPath = "github.com/easyops-cn/go-proto-giraffe"
 )
 
 func init() {
@@ -46,10 +49,10 @@ func NewPlugin(opts ...Option) generator.Plugin {
 // plugin architecture.  It generates bindings for gRPC support.
 type giraffeMicro struct {
 	useGogoImport bool
-	gen *generator.Generator
-	ioPkg      generator.Single
-	contextPkg generator.Single
-	giraffePkg generator.Single
+	gen           *generator.Generator
+	ioPkg         generator.Single
+	contextPkg    generator.Single
+	giraffePkg    generator.Single
 }
 
 type Option func(g *giraffeMicro)
@@ -67,9 +70,10 @@ func (g *giraffeMicro) Name() string {
 // They may vary from the final path component of the import path
 // if the name is used by other packages.
 var (
-	ioPkg string
-	contextPkg string
-	giraffePkg string
+	ioPkg           string
+	contextPkg      string
+	giraffePkg      string
+	giraffeProtoPkg string
 )
 
 // Init initializes the plugin.
@@ -105,11 +109,13 @@ func (g *giraffeMicro) Generate(file *generator.FileDescriptor) {
 	ioPkg = string(g.gen.AddImport(ioPkgPath))
 	contextPkg = string(g.gen.AddImport(contextPkgPath))
 	giraffePkg = string(g.gen.AddImport(giraffePkgPath))
+	giraffeProtoPkg = string(g.gen.AddImport(giraffeProtoPkgPath))
 
 	g.P("// Reference imports to suppress errors if they are not otherwise used.")
 	g.P("var _ = ", ioPkg, ".EOF")
 	g.P("var _ ", contextPkg, ".Context")
 	g.P("var _ ", giraffePkg, ".Client")
+	g.P("var _ ", giraffeProtoPkg, ".Contract")
 	g.P()
 
 	// Assert version compatibility.
@@ -133,9 +139,13 @@ var reservedClientName = map[string]bool{
 
 func unexport(s string) string { return strings.ToLower(s[:1]) + s[1:] }
 
-func contractVarName(method *pb.MethodDescriptorProto) string { return fmt.Sprintf("_%sContract", method.GetName())}
+func methodDescVarName(method *pb.MethodDescriptorProto) string {
+	return fmt.Sprintf("_%sMethodDesc", method.GetName())
+}
 
-func endpointName(method *pb.MethodDescriptorProto) string { return fmt.Sprintf("_%sEndpoint", method.GetName())}
+func endpointName(method *pb.MethodDescriptorProto) string {
+	return fmt.Sprintf("_%sEndpoint", method.GetName())
+}
 
 // deprecationComment is the standard comment added to deprecated
 // messages, fields, enums, and enum values.
@@ -218,50 +228,95 @@ func (g *giraffeMicro) generateService(file *generator.FileDescriptor, service *
 	g.P("func RegisterService(s ", giraffePkg, ".Server, srv ", serverType, ") {")
 	for _, method := range service.Method {
 		if !method.GetServerStreaming() && !method.GetClientStreaming() {
-			g.P("s.RegisterUnaryEndpoint(", contractVarName(method), ", ", endpointName(method), "(srv))")
+			g.P("s.RegisterUnaryEndpoint(", methodDescVarName(method), ", ", endpointName(method), "(srv))")
 		} else {
-			g.P("s.RegisterStreamEndpoint(", contractVarName(method), ", ", endpointName(method), "(srv))")
+			g.P("s.RegisterStreamEndpoint(", methodDescVarName(method), ", ", endpointName(method), "(srv))")
 		}
 	}
 	g.P("}")
 	g.P()
 
 	// Service descriptor.
-	g.P("// API Contract")
+	g.P("// Method Description")
+	methodServiceName := fmt.Sprintf("%s.%s", serviceName, service.GetName())
 	for _, method := range service.Method {
-		contractType := unexport(method.GetName()) + "Contract"
-		g.P("var ", contractVarName(method), " = &", contractType, "{}")
-		g.P("type ", contractType, " struct {}")
-		g.P("func (*", contractType, ") ServiceName() string { return ", strconv.Quote(serviceName + "." + service.GetName()), " }")
-		g.P("func (*", contractType, ") MethodName() string { return ", strconv.Quote(method.GetName()), " }")
-		g.P("func (*", contractType, ") RequestMessage() interface{} { return new(", g.typeName(method.GetInputType()), ") }")
-		g.P("func (*", contractType, ") ResponseMessage() interface{} { return new(", g.typeName(method.GetInputType()), ") }")
-		if method.GetClientStreaming() || method.GetServerStreaming() {
-			g.P("func (*", contractType, ") ClientStreams() bool { return ", method.GetClientStreaming(), " }")
-			g.P("func (*", contractType, ") ServerStreams() bool { return ", method.GetServerStreaming(), " }")
-		}
-		// Method Options
-		// Contract Options
-		if i, err := proto.GetExtension(method.GetOptions(), giraffeproto.E_Contract); err == nil {
-			m := i.(*giraffeproto.Contract)
-			g.P("func (*", contractType, ") ContractName() string { return ", strconv.Quote(m.GetName()), " }")
-			g.P("func (*", contractType, ") ContractVersion() string { return ", strconv.Quote(m.GetVersion()), " }")
-		}
-		// HTTPRule Options
-		if i, err := proto.GetExtension(method.GetOptions(), giraffeproto.E_Http); err == nil {
-			m := i.(*giraffeproto.HttpRule)
-			var verb, path string
-			switch {
-			case m.GetGet() != "": verb = "GET"; path = m.GetGet()
-			case m.GetPost() != "": verb = "POST"; path = m.GetPost()
-			case m.GetPut() != "": verb = "PUT"; path = m.GetPut()
-			case m.GetDelete() != "": verb = "DELETE"; path = m.GetDelete()
-			case m.GetPatch() != "": verb = "PATCH"; path = m.GetPatch()
-			}
-			g.P("func (*", contractType, ") Pattern() (string, string) { return ", strconv.Quote(verb), ", ", strconv.Quote(path), " }")
-			g.P("func (*", contractType, ") Body() string { return ", strconv.Quote(m.GetBody()), " }")
+		if !method.GetClientStreaming() && !method.GetServerStreaming() {
+			g.generateMethodDesc(methodServiceName, method)
+		} else {
+			g.generateStreamDesc(methodServiceName, method)
 		}
 	}
+	g.P()
+}
+
+func getHttpRule(method *pb.MethodDescriptorProto) giraffeproto.HttpRule {
+	if i, err := proto.GetExtension(method.GetOptions(), giraffeproto.E_Http); err == nil {
+		return *(i.(*giraffeproto.HttpRule))
+	}
+	return giraffeproto.HttpRule{}
+}
+
+func getContract(method *pb.MethodDescriptorProto) giraffeproto.Contract {
+	if i, err := proto.GetExtension(method.GetOptions(), giraffeproto.E_Contract); err == nil {
+		return *(i.(*giraffeproto.Contract))
+	}
+	return giraffeproto.Contract{}
+}
+
+func (g *giraffeMicro) generateMethodDesc(serviceName string, method *pb.MethodDescriptorProto) {
+	contract := getContract(method)
+	httpRule := getHttpRule(method)
+	g.P("var ", methodDescVarName(method), " = &", giraffePkg, ".MethodDesc{")
+	g.P("Contract: &", giraffeProtoPkg, ".Contract{")
+	g.P("Name: ", strconv.Quote(contract.GetName()), ",")
+	g.P("Version: ", strconv.Quote(contract.GetVersion()), ",")
+	g.P("},")
+	g.P("ServiceName: ", strconv.Quote(serviceName), ",")
+	g.P("MethodName: ", strconv.Quote(method.GetName()), ",")
+	g.P("RequestType: (*", g.typeName(method.GetInputType()), ")(nil),")
+	g.P("ResponseType: (*", g.typeName(method.GetInputType()), ")(nil),")
+	g.P("HttpRule: &", giraffeProtoPkg, ".HttpRule{")
+	switch {
+	case httpRule.GetGet() != "":
+		g.P("Pattern: &", giraffeProtoPkg, ".HttpRule_Get{")
+		g.P("Get: ", strconv.Quote(httpRule.GetGet()), ",")
+		g.P("},")
+	case httpRule.GetPost()	!= "":
+		g.P("Pattern: &", giraffeProtoPkg, ".HttpRule_Post{")
+		g.P("Post: ", strconv.Quote(httpRule.GetPost()), ",")
+		g.P("},")
+	case httpRule.GetPut() != "":
+		g.P("Pattern: &", giraffeProtoPkg, ".HttpRule_Put{")
+		g.P("Put: ", strconv.Quote(httpRule.GetPut()), ",")
+		g.P("},")
+	case httpRule.GetDelete() != "":
+		g.P("Pattern: &", giraffeProtoPkg, ".HttpRule_Delete{")
+		g.P("Delete: ", strconv.Quote(httpRule.GetDelete()), ",")
+		g.P("},")
+	case httpRule.GetPatch() != "":
+		g.P("Pattern: &", giraffeProtoPkg, ".HttpRule_Patch{")
+		g.P("Patch: ", strconv.Quote(httpRule.GetPatch()), ",")
+		g.P("},")
+	}
+	g.P("Body: ", strconv.Quote(httpRule.GetBody()), ",")
+	g.P("ResponseBody: ", strconv.Quote(httpRule.GetResponseBody()), ",")
+	g.P("},")
+	g.P("}")
+	g.P()
+}
+
+func (g *giraffeMicro) generateStreamDesc(serviceName string, method *pb.MethodDescriptorProto) {
+	contract := getContract(method)
+	g.P("var ", methodDescVarName(method), " = &", giraffePkg, ".MethodDesc{")
+	g.P("Contract: &", giraffeProtoPkg, ".Contract{")
+	g.P("Name: ", strconv.Quote(contract.GetName()), ",")
+	g.P("Version: ", strconv.Quote(contract.GetVersion()), ",")
+	g.P("},")
+	g.P("ServiceName: ", strconv.Quote(serviceName), ",")
+	g.P("StreamName: ", strconv.Quote(method.GetName()), ",")
+	g.P("ClientStreams: ", method.GetClientStreaming(), ",")
+	g.P("ServerStreams: ", method.GetServerStreaming(), ",")
+	g.P("}")
 	g.P()
 }
 
@@ -295,7 +350,7 @@ func (g *giraffeMicro) generateClientMethod(method *pb.MethodDescriptorProto) {
 	if !method.GetServerStreaming() && !method.GetClientStreaming() {
 		g.P("out := new(", outType, ")")
 		// TODO: add call options
-		g.P("err := c.c.Invoke(ctx, ", contractVarName(method), ", in, out)")
+		g.P("err := c.c.Invoke(ctx, ", methodDescVarName(method), ", in, out)")
 		g.P("if err != nil { return nil, err }")
 		g.P("return out, nil")
 		g.P("}")
@@ -303,7 +358,7 @@ func (g *giraffeMicro) generateClientMethod(method *pb.MethodDescriptorProto) {
 		return
 	}
 	streamType := unexport(methName) + "Client"
-	g.P("stream, err := c.c.NewStream(ctx, ", contractVarName(method), ")")
+	g.P("stream, err := c.c.NewStream(ctx, ", methodDescVarName(method), ")")
 	g.P("if err != nil { return nil, err }")
 	g.P("x := &", streamType, "{stream}")
 	if !method.GetClientStreaming() {
