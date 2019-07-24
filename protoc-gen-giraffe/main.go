@@ -1,13 +1,15 @@
 package main
 
 import (
-	"github.com/easyops-cn/go-proto-giraffe/plugin"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
+
+	"github.com/easyops-cn/go-proto-giraffe/plugin"
 )
 
 func main() {
