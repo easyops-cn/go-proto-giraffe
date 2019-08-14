@@ -274,7 +274,7 @@ func (g *giraffeMicro) generateMethodDesc(serviceName string, method *pb.MethodD
 	g.P("ServiceName: ", strconv.Quote(serviceName), ",")
 	g.P("MethodName: ", strconv.Quote(method.GetName()), ",")
 	g.P("RequestType: (*", g.typeName(method.GetInputType()), ")(nil),")
-	g.P("ResponseType: (*", g.typeName(method.GetInputType()), ")(nil),")
+	g.P("ResponseType: (*", g.typeName(method.GetOutputType()), ")(nil),")
 	g.P("HttpRule: &", giraffeProtoPkg, ".HttpRule{")
 	switch {
 	case httpRule.GetGet() != "":
