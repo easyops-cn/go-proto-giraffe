@@ -130,7 +130,7 @@ func (g *giraffeMicro) Generate(file *generator.FileDescriptor) {
 }
 
 // GenerateImports generates the import declaration for this file.
-func (g *giraffeMicro) GenerateImports(file *generator.FileDescriptor) {}
+func (g *giraffeMicro) GenerateImports(*generator.FileDescriptor) {}
 
 // reservedClientName records whether a client name is reserved on the client side.
 var reservedClientName = map[string]bool{
@@ -250,14 +250,14 @@ func (g *giraffeMicro) generateService(file *generator.FileDescriptor, service *
 }
 
 func getHttpRule(method *pb.MethodDescriptorProto) giraffeproto.HttpRule {
-	if i, err := proto.GetExtension(method.GetOptions(), giraffeproto.E_Http); err == nil {
+	if i, err := proto.GetExtension(method.GetOptions(), E_Http); err == nil {
 		return *(i.(*giraffeproto.HttpRule))
 	}
 	return giraffeproto.HttpRule{}
 }
 
 func getContract(method *pb.MethodDescriptorProto) giraffeproto.Contract {
-	if i, err := proto.GetExtension(method.GetOptions(), giraffeproto.E_Contract); err == nil {
+	if i, err := proto.GetExtension(method.GetOptions(), E_Contract); err == nil {
 		return *(i.(*giraffeproto.Contract))
 	}
 	return giraffeproto.Contract{}

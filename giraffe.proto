@@ -2,21 +2,7 @@ syntax = "proto3";
 
 package giraffeproto;
 
-import "google/protobuf/descriptor.proto";
-import "github.com/easyops-cn/go-proto-giraffe/http.proto";
-
 option go_package = "github.com/easyops-cn/go-proto-giraffe;giraffeproto";
-
-extend google.protobuf.MethodOptions {
-    string url_pattern      = 50001;
-    string contract_name    = 50002;
-    string contract_version = 50003;
-    string data_field       = 50004;
-    string query_field      = 50005;
-    string content_type     = 50006;
-    Contract contract = 72295000;
-    HttpRule http = 72295728;
-}
 
 message Contract {
     string name = 1;
